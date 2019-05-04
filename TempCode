@@ -1,0 +1,103 @@
+#include <UniversalTelegramBot.h>
+
+#include <ESP8266WiFi.h>
+
+//SSL Client
+#include <WiFiClientSecure.h>
+
+//#include <ArduinoJson.h>
+
+//Wifi manager headers
+#include <DNSServer.h>
+#include <ESP8266WebServer.h>
+
+// -------- Define Pins -----------
+
+//temperature sensor pin
+#define tempPin A0
+
+// Initialize Telegram BOT
+#define botToken "XX:XXXX"  // your Bot Token (Get from Botfather)
+WiFiClientSecure client;
+UniversalTelegramBot bot(botToken, client);
+long checkTelegramDueTime;
+int checkTelegramDelay = 2000; //  1000 (1 second)
+
+// The person/group you want the alert messages to go to.
+// You must start a chat with a bot first before it can send you messages
+String defaultChatId = "XXX"; //look for "myIdBot" bot in telegram**
+
+ char ssid[] = "//";       // your network SSID (name)
+ char password[] = "//";  // your network key
+
+void setup() {
+
+  Serial.begin(115200);
+    
+  Serial.println("");
+  Serial.println("WiFi connected");
+  Serial.println("IP address: ");
+  IPAddress ip = WiFi.localIP();
+  Serial.println(ip);
+
+}
+
+int checkTemp() {
+  int value = analogRead(tempPin);
+  float temp = value * 0.48828125; // temp formula for *C
+  Serial.print("Temp: ");
+  Serial.println(temp);
+  return temp;
+}
+
+
+// --- Telgram functions ---
+
+void handleNewMessages(int numNewMessages) {
+  for (int i=0; i<numNewMessages; i++) {
+    String chat_id = String(bot.messages[i].chat_id);
+    String text = bot.messages[i].text;
+
+    String from_name = bot.messages[i].from_name;
+    if (from_name == "") from_name = "Guest";
+
+    if (text == "/temp") {
+      int value = checkTemp();
+      bot.sendMessage(chat_id, "Temperature = " + String(value) + "*C");
+    }
+    if (text == "/options") {
+      String keyboardJson = "[[\"/temp\"]]";
+      bot.sendMessageWithReplyKeyboard(chat_id, "Choose the following options", "", keyboardJson, true);
+    }
+
+    if (text == "/start" || text == "/help") {
+      String welcome = "Welcome to your new bot, " + from_name + ".\n";
+      welcome += "Your are available to add more sensors after first try.\n\n";
+      welcome += "The following options are available.\n\n";
+      welcome += "/temp : to return the current value of the Temp\n";
+      welcome += "/options : returns a custom reply keyboard\n";
+      welcome += "/help : displays this message again\n";
+      bot.sendMessage(chat_id, welcome, "Markdown");
+    }
+  }
+}
+
+
+// --- ----------------- ---
+
+void loop() {
+
+  long now = millis();
+  if(now >= checkTelegramDueTime) {
+    Serial.println("---- Checking Telegram -----");
+    int numNewMessages = bot.getUpdates(bot.last_message_received + 1);
+    while(numNewMessages) {
+      Serial.println("Bot recieved a message");
+      handleNewMessages(numNewMessages);
+      numNewMessages = bot.getUpdates(bot.last_message_received + 1);
+    }
+    checkTelegramDueTime = now + checkTelegramDelay;
+  }
+  now = millis();
+  
+}
